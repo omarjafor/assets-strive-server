@@ -24,6 +24,8 @@ async function run() {
     try {
         const userCollection = client.db('assetDB').collection('users');
         const customrequestCollection = client.db('assetDB').collection('customrequests');
+        const requestedassetCollection = client.db('assetDB').collection('requestedassets');
+        const assetCollection = client.db('assetDB').collection('assets');
 
         // jwt related apis 
         app.post('/jwt', async (req, res) => {
@@ -46,6 +48,77 @@ async function run() {
                 next();
             })
         }
+        // Users Related Apis 
+        app.get('/users/admin/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            const query = { email: email };
+            const user = await userCollection.findOne(query);
+            let admin = false;
+            if (user) {
+                admin = user?.role === 'admin';
+            }
+            res.send({ admin });
+        })
+
+        app.get('/users/employee/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            if (email !== req.decoded.email) {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            const query = { email: email };
+            const user = await userCollection.findOne(query);
+            let employee = false;
+            if (user) {
+                employee = user?.role === 'employee';
+            }
+            res.send({ employee });
+        })
+
+        app.post('/users', async(req, res) => {
+            const user = req.body;
+            const query = { email: user.email }
+            const exist = await userCollection.findOne(query);
+            if(exist){
+                return res.send({ message: 'user already exists', insertedId: null })
+            }
+            const result = await userCollection.insertOne(user);
+            res.send(result);
+        })
+        // Assets Related Apis 
+        app.get('/assets', async(req, res) => {
+            const result = await assetCollection.find().toArray();
+            res.send(result);
+        })
+
+        app.get('/assets/search', async (req, res) => {
+            const { query } = req.query;
+            const filter = { name: { $regex: query, $options: 'i' }}
+            const result = await assetCollection.find(filter).toArray();
+            res.send(result);
+        })
+
+        app.get('/assets/filter', async (req, res) => {
+            const { availability, type } = req.query;
+            let quantity = {};
+            if(availability === 'Available'){
+                quantity = { $gt: 0 }
+            }else {
+                quantity = 0;
+            }
+            const filter = { quantity, type }
+            console.log(filter);
+            const result = await assetCollection.find(filter).toArray();
+            res.send(result);
+        })
+
+        app.post('/assets', async(req, res) => {
+            const assetInfo = req.body;
+            const result = await assetCollection.insertOne(assetInfo);
+            res.send(result);
+        })
 
         // custom request related apis 
         app.get('/customrequests', async(req, res) => {
@@ -76,6 +149,13 @@ async function run() {
                 }
             }
             const result = await customrequestCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
+        // Requestedassets related apis 
+        app.post('/requestedassets', async(req, res) => {
+            const reqasset = req.body;
+            const result = await requestedassetCollection.insertOne(reqasset);
             res.send(result);
         })
 
