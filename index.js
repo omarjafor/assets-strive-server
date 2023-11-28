@@ -4,7 +4,7 @@ const cors = require('cors');
 const port = process.env.PORT || 5000;
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-// const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -48,7 +48,15 @@ async function run() {
                 next();
             })
         }
+
         // Users Related Apis 
+        app.get('/users/:email', async(req, res) => {
+            const email = req.params.email;
+            const query = { email: email }
+            const result = await userCollection.findOne(query);
+            res.send(result);
+        })
+
         app.get('/users/admin/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
             if (email !== req.decoded.email) {
@@ -77,8 +85,16 @@ async function run() {
             res.send({ employee });
         })
 
+        app.get('/users', async(req, res) => {
+            const company = req.query.company;
+            const query = { company : company }
+            const result = await userCollection.find(query).toArray();
+            res.send(result);
+        })
+
         app.post('/users', async(req, res) => {
             const user = req.body;
+            console.log(user);
             const query = { email: user.email }
             const exist = await userCollection.findOne(query);
             if(exist){
@@ -87,6 +103,22 @@ async function run() {
             const result = await userCollection.insertOne(user);
             res.send(result);
         })
+
+        app.patch('/users/:id', async(req, res) => {
+            const updateUser = req.body;
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const updatedDoc = {
+                $set: {
+                    name: updateUser.name,
+                    birthdate: updateUser.birthdate,
+                    img: updateUser.img
+                }
+            }
+            const result = await userCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
         // Assets Related Apis 
         app.get('/assets', async(req, res) => {
             const result = await assetCollection.find().toArray();
@@ -153,9 +185,126 @@ async function run() {
         })
 
         // Requestedassets related apis 
-        app.post('/requestedassets', async(req, res) => {
+        app.get('/requestedassets', async(req, res) => {
+            const result = await requestedassetCollection.aggregate([
+                {
+                    $group: {
+                        _id: "$assetid",
+                        count: { $sum: 1 },
+                        assetData: { $first: "$$ROOT" }
+                    }
+                },
+                {
+                    $match: {
+                        count: { $gt: 1 }
+                    }
+                },
+                {
+                    $replaceRoot: {
+                        newRoot: {
+                            $mergeObjects: ["$assetData", { count: "$count" }]
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        assetname: 1,
+                        type: 1,
+                        email: 1,
+                        sendername: 1,
+                        requestdate: 1,
+                        additionalnote: 1,
+                        status: 1,
+                        count: 1
+                    }
+                },
+                {
+                    $limit:4
+                }
+            ]).toArray();
+            res.send(result);
+        })
+
+        app.get('/requestedassets/:email', async(req, res) =>{
+            const email = req.params.email;
+            const query = { email: email }
+            const result = await requestedassetCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        app.get('/requestedassets/search', async (req, res) => {
+            const { query } = req.query;
+            const filter = { assetname: { $regex: query, $options: 'i' } }
+            const result = await requestedassetCollection.find(filter).toArray();
+            res.send(result);
+        })
+
+        app.get('/requestedassets/filter', async (req, res) => {
+            const { status, type } = req.query;
+            const filter = { status, type }
+            console.log(filter);
+            const result = await requestedassetCollection.find(filter).toArray();
+            res.send(result);
+        })
+
+        app.post('/requestedassets', async (req, res) => {
             const reqasset = req.body;
             const result = await requestedassetCollection.insertOne(reqasset);
+            res.send(result);
+        })
+
+        app.patch('/requestedassets/:id', async(req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id)}
+            const reqdata = await requestedassetCollection.findOne(filter);
+            const assetId = reqdata.assetid
+            const quantityUpdate = await assetCollection.updateOne({ _id: new ObjectId(assetId) }, { $inc: { quantity: 1 } })
+            console.log(quantityUpdate);
+            const updatedDoc = {
+                $set: {
+                    status: "returned"
+                }
+            }
+            const result = await requestedassetCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
+        app.delete('/requestedassets/:id', async(req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id)}
+            const result = await requestedassetCollection.deleteOne(query);
+            res.send(result);
+        })
+
+        // Payment Intent Stripe 
+        app.post('/create-payment-intent', async (req, res) => {
+            const { price } = req.body;
+            const amount = parseInt(price * 100);
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: 'usd',
+                payment_method_types: ['card']
+            });
+            res.send({
+                clientSecret: paymentIntent.client_secret
+            })
+        })
+
+        // Payment Data Update To Users 
+        app.put('/users/payment', async (req, res) => {
+            const userPay = req.body;
+            const email = userPay.email;
+            const filter = { email: email }
+            const updatedDoc = {
+                $set: {
+                    payment: userPay.payment,
+                    transactionId: userPay.transactionId,
+                    date: userPay.date,
+                    role: userPay.role
+                }
+            }
+            const result = await userCollection.updateOne(filter, updatedDoc);
             res.send(result);
         })
 
