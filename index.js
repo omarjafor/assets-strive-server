@@ -50,7 +50,7 @@ async function run() {
         }
 
         // Users Related Apis 
-        app.get('/users/:email', async(req, res) => {
+        app.get('/users/:email', async (req, res) => {
             const email = req.params.email;
             const query = { email: email }
             const result = await userCollection.findOne(query);
@@ -85,26 +85,43 @@ async function run() {
             res.send({ employee });
         })
 
-        app.get('/users', async(req, res) => {
+        app.get('/users', async (req, res) => {
             const company = req.query.company;
-            const query = { company : company }
+            const query = { company: company }
             const result = await userCollection.find(query).toArray();
             res.send(result);
         })
 
-        app.post('/users', async(req, res) => {
+        app.post('/users', async (req, res) => {
             const user = req.body;
             console.log(user);
             const query = { email: user.email }
             const exist = await userCollection.findOne(query);
-            if(exist){
+            if (exist) {
                 return res.send({ message: 'user already exists', insertedId: null })
             }
             const result = await userCollection.insertOne(user);
             res.send(result);
         })
 
-        app.patch('/users/:id', async(req, res) => {
+        // For Admin 
+        app.patch('/users/admin/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const updatedDoc = {
+                $unset: {
+                    company: '',
+                    companylogo: ''
+                },
+                $set: {
+                    role: 'user'
+                }
+            }
+            const result = await userCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
+        app.patch('/users/:id', async (req, res) => {
             const updateUser = req.body;
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
@@ -120,14 +137,22 @@ async function run() {
         })
 
         // Assets Related Apis 
-        app.get('/assets', async(req, res) => {
+        app.get('/assets', async (req, res) => {
             const result = await assetCollection.find().toArray();
+            res.send(result);
+        })
+
+        // For admin 
+        app.get('/assets/admin/:company', async (req, res) => {
+            const company = req.params.company;
+            const query = { company }
+            const result = await assetCollection.find(query).toArray();
             res.send(result);
         })
 
         app.get('/assets/search', async (req, res) => {
             const { query } = req.query;
-            const filter = { name: { $regex: query, $options: 'i' }}
+            const filter = { name: { $regex: query, $options: 'i' } }
             const result = await assetCollection.find(filter).toArray();
             res.send(result);
         })
@@ -135,41 +160,73 @@ async function run() {
         app.get('/assets/filter', async (req, res) => {
             const { availability, type } = req.query;
             let quantity = {};
-            if(availability === 'Available'){
+            if (availability === 'Available') {
                 quantity = { $gt: 0 }
-            }else {
+            } else {
                 quantity = 0;
             }
             const filter = { quantity, type }
-            console.log(filter);
             const result = await assetCollection.find(filter).toArray();
             res.send(result);
         })
 
-        app.post('/assets', async(req, res) => {
+        // for admin 
+        app.post('/assets', async (req, res) => {
             const assetInfo = req.body;
             const result = await assetCollection.insertOne(assetInfo);
             res.send(result);
         })
 
-        // custom request related apis 
-        app.get('/customrequests', async(req, res) => {
+        // For Admin only
+        app.patch('/assets/admin/:id', async (req, res) => {
+            const assetInfo = req.body;
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const updatedDoc = {
+                $set: {
+                    name: assetInfo.name,
+                    quantity: assetInfo.quantity,
+                    type: assetInfo.type
+                }
+            }
+            const result = await assetCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
+        // For admin only
+        app.delete('/assets/admin/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await assetCollection.deleteOne(query);
+            res.send(result);
+        })
+
+        // custom request related apis ...............................
+        app.get('/customrequests', async (req, res) => {
             const email = req.query.email;
             const query = { email: email }
             const result = await customrequestCollection.find(query).toArray();
             res.send(result);
         })
 
-        app.post('/customrequests', async(req, res) => {
+        // For admin 
+        app.get('/customrequests/:company', async (req, res) => {
+            const company = req.params.company;
+            const query = { company }
+            const result = await customrequestCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        app.post('/customrequests', async (req, res) => {
             const customrequest = req.body;
             const result = await customrequestCollection.insertOne(customrequest);
             res.send(result);
         })
 
-        app.patch('/customrequests/:id', async(req, res) => {
+        app.patch('/customrequests/:id', async (req, res) => {
             const requestInfo = req.body;
             const id = req.params.id;
-            const filter = { _id: new ObjectId(id)}
+            const filter = { _id: new ObjectId(id) }
             const updatedDoc = {
                 $set: {
                     name: requestInfo.name,
@@ -184,8 +241,24 @@ async function run() {
             res.send(result);
         })
 
+        // For Admin 
+        app.patch('/customrequests/admin/:id', async(req, res) => {
+            const requestInfo = req.body;
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id)}
+            const updatedDoc = {
+                $set: {
+                    status: requestInfo.status,
+                    approvedate: requestInfo.approvedate,
+                    rejectdate: requestInfo.rejectdate 
+                }
+            }
+            const result = await customrequestCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
         // Requestedassets related apis 
-        app.get('/requestedassets', async(req, res) => {
+        app.get('/requestedassets', async (req, res) => {
             const result = await requestedassetCollection.aggregate([
                 {
                     $group: {
@@ -220,13 +293,13 @@ async function run() {
                     }
                 },
                 {
-                    $limit:4
+                    $limit: 4
                 }
             ]).toArray();
             res.send(result);
         })
 
-        app.get('/requestedassets/:email', async(req, res) =>{
+        app.get('/requestedassets/:email', async (req, res) => {
             const email = req.params.email;
             const query = { email: email }
             const result = await requestedassetCollection.find(query).toArray();
@@ -235,6 +308,7 @@ async function run() {
 
         app.get('/requestedassets/search', async (req, res) => {
             const { query } = req.query;
+            console.log(query);
             const filter = { assetname: { $regex: query, $options: 'i' } }
             const result = await requestedassetCollection.find(filter).toArray();
             res.send(result);
@@ -248,15 +322,23 @@ async function run() {
             res.send(result);
         })
 
+        // For admin 
+        app.get('/requestedassets/admin/:company', async (req, res) => {
+            const company = req.params.company;
+            const query = { company }
+            const result = await requestedassetCollection.find(query).toArray();
+            res.send(result);
+        })
+
         app.post('/requestedassets', async (req, res) => {
             const reqasset = req.body;
             const result = await requestedassetCollection.insertOne(reqasset);
             res.send(result);
         })
 
-        app.patch('/requestedassets/:id', async(req, res) => {
+        app.patch('/requestedassets/:id', async (req, res) => {
             const id = req.params.id;
-            const filter = { _id: new ObjectId(id)}
+            const filter = { _id: new ObjectId(id) }
             const reqdata = await requestedassetCollection.findOne(filter);
             const assetId = reqdata.assetid
             const quantityUpdate = await assetCollection.updateOne({ _id: new ObjectId(assetId) }, { $inc: { quantity: 1 } })
@@ -270,9 +352,25 @@ async function run() {
             res.send(result);
         })
 
-        app.delete('/requestedassets/:id', async(req, res) => {
+        // For Admin 
+        app.patch('/requestedassets/admin/:id', async(req, res) => {
+            const assetInfo = req.body;
             const id = req.params.id;
-            const query = { _id: new ObjectId(id)}
+            const filter = { _id: new ObjectId(id)}
+            const updatedDoc = {
+                $set: {
+                    status: assetInfo.status,
+                    approvedate: assetInfo.approvedate,
+                    rejectdate: assetInfo.rejectdate 
+                }
+            }
+            const result = await requestedassetCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
+        app.delete('/requestedassets/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
             const result = await requestedassetCollection.deleteOne(query);
             res.send(result);
         })
@@ -296,12 +394,22 @@ async function run() {
             const userPay = req.body;
             const email = userPay.email;
             const filter = { email: email }
+            const user = await userCollection.findOne(filter);
+            let updatedLimit = user.limit;
+            if (userPay.payment == 5) {
+                updatedLimit += 5;
+            } else if (userPay.payment == 8) {
+                updatedLimit += 10;
+            } else if (userPay.payment == 15) {
+                updatedLimit += 20;
+            }
             const updatedDoc = {
                 $set: {
                     payment: userPay.payment,
                     transactionId: userPay.transactionId,
                     date: userPay.date,
-                    role: userPay.role
+                    role: userPay.role,
+                    limit: updatedLimit
                 }
             }
             const result = await userCollection.updateOne(filter, updatedDoc);
