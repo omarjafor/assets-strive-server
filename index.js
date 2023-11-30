@@ -410,7 +410,7 @@ async function run() {
             const result = await requestedassetCollection.aggregate([
                 {
                     $match: {
-                        status: "pending" // Filter only pending statuses
+                        status: "pending"
                     }
                 },
                 {
@@ -422,11 +422,11 @@ async function run() {
                 },
                 {
                     $sort: {
-                        count: -1 // Sort by count in descending order
+                        count: -1
                     }
                 },
                 {
-                    $limit: 5 // Limit to top 5 documents with the highest count
+                    $limit: 5
                 },
                 {
                     $replaceRoot: {
