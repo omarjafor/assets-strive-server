@@ -49,6 +49,17 @@ async function run() {
             })
         }
 
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email: email };
+            const user = await userCollection.findOne(query);
+            const isAdmin = user?.role === 'admin';
+            if (!isAdmin) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            next();
+        }
+
         // Users Related Apis 
         app.get('/users/:email', async (req, res) => {
             const email = req.params.email;
@@ -93,7 +104,7 @@ async function run() {
         })
 
         // For admin 
-        app.get('/admin/users', async(req, res) => {
+        app.get('/admin/users', verifyToken, verifyAdmin, async (req, res) => {
             const query = { role: 'user' }
             const result = await userCollection.find(query).toArray();
             res.send(result);
@@ -112,7 +123,7 @@ async function run() {
         })
 
         // For Admin 
-        app.patch('/users/admin/:id', async (req, res) => {
+        app.patch('/users/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
             const updatedDoc = {
@@ -129,7 +140,7 @@ async function run() {
         })
 
         // For Admin 
-        app.patch('/admin/users/:id', async (req, res) => {
+        app.patch('/admin/users/:id', verifyToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const updateInfo = req.body
             const filter = { _id: new ObjectId(id) }
@@ -145,8 +156,8 @@ async function run() {
         })
 
         // For Admin 
-        app.put('/admin/users/makeallemployee', async (req, res) => {
-            const ids = req.body.ids; 
+        app.put('/admin/users/makeallemployee', verifyToken, verifyAdmin, async (req, res) => {
+            const ids = req.body.ids;
             const updateInfo = req.body.updateInfo;
             const filter = { _id: { $in: ids.map(id => new ObjectId(id)) } };
             const updatedDoc = {
@@ -183,9 +194,17 @@ async function run() {
         })
 
         // For admin 
-        app.get('/assets/admin/:company', async (req, res) => {
+        app.get('/assets/admin/:company', verifyToken, verifyAdmin, async (req, res) => {
             const company = req.params.company;
             const query = { company }
+            const result = await assetCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        // For admin 
+        app.get('/assets/admin/limitedstock/:company', verifyToken, verifyAdmin, async (req, res) => {
+            const company = req.params.company;
+            const query = { company, quantity: { $lt: 10 } }
             const result = await assetCollection.find(query).toArray();
             res.send(result);
         })
@@ -211,14 +230,14 @@ async function run() {
         })
 
         // for admin 
-        app.post('/assets', async (req, res) => {
+        app.post('/assets', verifyToken, verifyAdmin, async (req, res) => {
             const assetInfo = req.body;
             const result = await assetCollection.insertOne(assetInfo);
             res.send(result);
         })
 
         // For Admin only
-        app.patch('/assets/admin/:id', async (req, res) => {
+        app.patch('/assets/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
             const assetInfo = req.body;
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
@@ -234,7 +253,7 @@ async function run() {
         })
 
         // For admin only
-        app.delete('/assets/admin/:id', async (req, res) => {
+        app.delete('/assets/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await assetCollection.deleteOne(query);
@@ -250,7 +269,7 @@ async function run() {
         })
 
         // For admin 
-        app.get('/customrequests/:company', async (req, res) => {
+        app.get('/customrequests/:company', verifyToken, verifyAdmin, async (req, res) => {
             const company = req.params.company;
             const query = { company }
             const result = await customrequestCollection.find(query).toArray();
@@ -282,15 +301,15 @@ async function run() {
         })
 
         // For Admin 
-        app.patch('/customrequests/admin/:id', async(req, res) => {
+        app.patch('/customrequests/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
             const requestInfo = req.body;
             const id = req.params.id;
-            const filter = { _id: new ObjectId(id)}
+            const filter = { _id: new ObjectId(id) }
             const updatedDoc = {
                 $set: {
                     status: requestInfo.status,
                     approvedate: requestInfo.approvedate,
-                    rejectdate: requestInfo.rejectdate 
+                    rejectdate: requestInfo.rejectdate
                 }
             }
             const result = await customrequestCollection.updateOne(filter, updatedDoc);
@@ -339,6 +358,100 @@ async function run() {
             res.send(result);
         })
 
+        // For Admin 
+        app.get('/requestedassets/admin/topmost', verifyToken, verifyAdmin, async (req, res) => {
+            const result = await requestedassetCollection.aggregate([
+                {
+                    $group: {
+                        _id: "$assetid",
+                        count: { $sum: 1 },
+                        assetData: { $first: "$$ROOT" }
+                    }
+                },
+                {
+                    $match: {
+                        count: { $gt: 1 }
+                    }
+                },
+                {
+                    $replaceRoot: {
+                        newRoot: {
+                            $mergeObjects: ["$assetData", { count: "$count" }]
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        assetname: 1,
+                        type: 1,
+                        email: 1,
+                        sendername: 1,
+                        requestdate: 1,
+                        additionalnote: 1,
+                        status: 1,
+                        count: 1
+                    }
+                },
+                {
+                    $sort: {
+                        count: -1
+                    }
+                },
+                {
+                    $limit: 4
+                }
+            ]).toArray();
+            res.send(result);
+        })
+
+        // For Admin 
+        app.get('/requestedassets/admin/toppending', verifyToken, verifyAdmin, async (req, res) => {
+            const result = await requestedassetCollection.aggregate([
+                {
+                    $match: {
+                        status: "pending" // Filter only pending statuses
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$assetid",
+                        count: { $sum: 1 },
+                        assetData: { $first: "$$ROOT" }
+                    }
+                },
+                {
+                    $sort: {
+                        count: -1 // Sort by count in descending order
+                    }
+                },
+                {
+                    $limit: 5 // Limit to top 5 documents with the highest count
+                },
+                {
+                    $replaceRoot: {
+                        newRoot: {
+                            $mergeObjects: ["$assetData", { count: "$count" }]
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        assetname: 1,
+                        type: 1,
+                        email: 1,
+                        sendername: 1,
+                        requestdate: 1,
+                        additionalnote: 1,
+                        status: 1,
+                        count: 1
+                    }
+                }
+            ]).toArray();
+            res.send(result);
+        })
+
         app.get('/requestedassets/:email', async (req, res) => {
             const email = req.params.email;
             const query = { email: email }
@@ -361,12 +474,41 @@ async function run() {
         })
 
         // For admin 
-        app.get('/requestedassets/admin/:company', async (req, res) => {
+        app.get('/requestedassets/admin/:company', verifyToken, verifyAdmin, async (req, res) => {
             const company = req.params.company;
             const query = { company }
             const result = await requestedassetCollection.find(query).toArray();
             res.send(result);
         })
+
+        // For Admin 
+        app.get('/requestedassets/admin/typepercentage/:company', verifyToken, verifyAdmin, async (req, res) => {
+            const company = req.params.company;
+            const query = { company };
+            const result = await requestedassetCollection.aggregate([
+                { $match: query },
+                {
+                    $group: {
+                        _id: '$type',
+                        count: { $sum: 1 },
+                    },
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        type: '$_id',
+                        count: 1,
+                    },
+                },
+            ]).toArray();
+            const returnableCount = result.find(item => item.type === 'Returnable')?.count || 0;
+            const nonReturnableCount = result.find(item => item.type === 'Non-returnable')?.count || 0;
+            res.send({
+                returnableCount,
+                nonReturnableCount,
+            });
+        });
+
 
         app.post('/requestedassets', async (req, res) => {
             const reqasset = req.body;
@@ -390,15 +532,15 @@ async function run() {
         })
 
         // For Admin 
-        app.patch('/requestedassets/admin/:id', async(req, res) => {
+        app.patch('/requestedassets/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
             const assetInfo = req.body;
             const id = req.params.id;
-            const filter = { _id: new ObjectId(id)}
+            const filter = { _id: new ObjectId(id) }
             const updatedDoc = {
                 $set: {
                     status: assetInfo.status,
                     approvedate: assetInfo.approvedate,
-                    rejectdate: assetInfo.rejectdate 
+                    rejectdate: assetInfo.rejectdate
                 }
             }
             const result = await requestedassetCollection.updateOne(filter, updatedDoc);
@@ -451,6 +593,15 @@ async function run() {
             }
             const result = await userCollection.updateOne(filter, updatedDoc);
             res.send(result);
+        })
+
+        // For Admin 
+        app.get('/admin/service-state', verifyToken, verifyAdmin, async(req, res) => {
+            const users = await userCollection.estimatedDocumentCount();
+            const assets = await assetCollection.estimatedDocumentCount();
+            const requests = await requestedassetCollection.estimatedDocumentCount();
+            const customrequests = await customrequestCollection.estimatedDocumentCount();
+            res.send({ users, assets, requests, customrequests});
         })
 
         // await client.db("admin").command({ ping: 1 });
