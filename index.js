@@ -92,6 +92,13 @@ async function run() {
             res.send(result);
         })
 
+        // For admin 
+        app.get('/admin/users', async(req, res) => {
+            const query = { role: 'user' }
+            const result = await userCollection.find(query).toArray();
+            res.send(result);
+        })
+
         app.post('/users', async (req, res) => {
             const user = req.body;
             console.log(user);
@@ -120,6 +127,39 @@ async function run() {
             const result = await userCollection.updateOne(filter, updatedDoc);
             res.send(result);
         })
+
+        // For Admin 
+        app.patch('/admin/users/:id', async (req, res) => {
+            const id = req.params.id;
+            const updateInfo = req.body
+            const filter = { _id: new ObjectId(id) }
+            const updatedDoc = {
+                $set: {
+                    company: updateInfo.company,
+                    companylogo: updateInfo.companylogo,
+                    role: 'employee'
+                },
+            }
+            const result = await userCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
+        // For Admin 
+        app.put('/admin/users/makeallemployee', async (req, res) => {
+            const ids = req.body.ids; 
+            const updateInfo = req.body.updateInfo;
+            const filter = { _id: { $in: ids.map(id => new ObjectId(id)) } };
+            const updatedDoc = {
+                $set: {
+                    company: updateInfo.company,
+                    companylogo: updateInfo.companylogo,
+                    role: 'employee'
+                },
+            };
+            const result = await userCollection.updateMany(filter, updatedDoc);
+            res.send(result);
+        });
+
 
         app.patch('/users/:id', async (req, res) => {
             const updateUser = req.body;
@@ -306,18 +346,16 @@ async function run() {
             res.send(result);
         })
 
-        app.get('/requestedassets/search', async (req, res) => {
-            const { query } = req.query;
-            console.log(query);
-            const filter = { assetname: { $regex: query, $options: 'i' } }
+        app.get('/mytest/search', async (req, res) => {
+            const { query, email } = req.query;
+            const filter = { assetname: { $regex: query, $options: 'i' }, email: email }
             const result = await requestedassetCollection.find(filter).toArray();
             res.send(result);
         })
 
-        app.get('/requestedassets/filter', async (req, res) => {
-            const { status, type } = req.query;
-            const filter = { status, type }
-            console.log(filter);
+        app.get('/mytest/filter', async (req, res) => {
+            const { status, type, email } = req.query;
+            const filter = { status, type, email }
             const result = await requestedassetCollection.find(filter).toArray();
             res.send(result);
         })
@@ -342,7 +380,6 @@ async function run() {
             const reqdata = await requestedassetCollection.findOne(filter);
             const assetId = reqdata.assetid
             const quantityUpdate = await assetCollection.updateOne({ _id: new ObjectId(assetId) }, { $inc: { quantity: 1 } })
-            console.log(quantityUpdate);
             const updatedDoc = {
                 $set: {
                     status: "returned"
